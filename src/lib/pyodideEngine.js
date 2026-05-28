@@ -124,15 +124,16 @@ from engine.models.assumptions import FinancialModelInput
 export async function compute(inputJson) {
   const py = await initEngine();
 
-  // Pass input via a JS proxy to avoid serialisation issues
-  py.globals.set('_input_dict', inputJson);
+  // Serialise to JSON string and parse in Python — avoids JsProxy issues
+  py.globals.set('_input_json_str', JSON.stringify(inputJson));
 
   const result = py.runPython(`
 import json
 from engine.runner import run_model
 from engine.models.assumptions import FinancialModelInput
 
-inp = FinancialModelInput(**_input_dict)
+_data = json.loads(_input_json_str)
+inp = FinancialModelInput(**_data)
 output = run_model(inp)
 json.dumps(output)
 `);
