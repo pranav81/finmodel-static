@@ -45,8 +45,7 @@ const NAV = [
   { to: 'costs',       label: 'Costs',       icon: 'layers',   project: true },
   { section: 'Outputs', projectRequired: true },
   { to: 'financials',  label: 'Financials',  icon: 'table',    project: true },
-  { to: 'metrics',     label: 'Metrics',     icon: 'chart',    project: true },
-  { to: 'dashboard',   label: 'Dashboard',   icon: 'home',     project: true },
+  { to: 'overview',    label: 'Overview',    icon: 'chart',    project: true },
 ];
 
 export function Sidebar() {
