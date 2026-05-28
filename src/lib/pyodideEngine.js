@@ -71,10 +71,16 @@ export async function initEngine() {
     pyodide.FS.mkdir('/engine/compute');
 
     // Fetch and write each engine file
-    const base = import.meta.env.BASE_URL;
+    // BASE_URL ends with '/' in Vite (e.g. '/finmodel-static/')
+    const base = import.meta.env.BASE_URL.endsWith('/')
+      ? import.meta.env.BASE_URL
+      : import.meta.env.BASE_URL + '/';
     for (const file of ENGINE_FILES) {
-      const resp = await fetch(`${base}engine/${file}`);
-      if (!resp.ok) throw new Error(`Failed to load engine file: ${file}`);
+      const url = `${base}engine/${file}`;
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(
+        `Failed to load ${file} (HTTP ${resp.status}) — check that public/engine/${file} exists in your repo`
+      );
       const text = await resp.text();
       pyodide.FS.writeFile(`/engine/${file}`, text);
     }
@@ -84,10 +90,16 @@ export async function initEngine() {
     pyodide.FS.writeFile('/engine/models/__init__.py', '');
     pyodide.FS.writeFile('/engine/compute/__init__.py', '');
 
-    // Add to Python path
+    // Add / to sys.path so 'import engine.runner' resolves
+    // Also list dirs so we can debug any missing files in the error log
     pyodide.runPython(`
-import sys
-sys.path.insert(0, '/')
+import sys, os
+if '/' not in sys.path:
+    sys.path.insert(0, '/')
+# Verify files landed correctly
+_compute_files = os.listdir('/engine/compute')
+if 'formula.py' not in _compute_files:
+    raise ImportError(f"formula.py missing from /engine/compute. Found: {_compute_files}")
 `);
 
     progress(85, 'Testing engine…');
