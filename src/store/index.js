@@ -79,3 +79,10 @@ export const useModelStore = create((set, get) => ({
     activeScenarioId: 'base', isExample: false,
   }),
 }));
+
+// ── Auth store stub (no auth in static version) ───────────────────────────
+export const useAuthStore = () => ({
+  user: null,
+  logout: () => {},
+});
+useAuthStore.getState = () => ({ user: null, logout: () => {} });
