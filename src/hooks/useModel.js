@@ -99,13 +99,19 @@ export function useModel() {
     }
   }, [projectId]);
 
-  // ── Export JSON ────────────────────────────────────────────────────────
+  // ── Export Excel ──────────────────────────────────────────────────────
   const downloadExcel = useCallback(async () => {
     const { input: currentInput, output: currentOutput } = useModelStore.getState();
-    if (!currentInput) { toast.error('Nothing to export'); return; }
-    const { exportModel } = await import('../lib/storage');
-    exportModel(projectId);
-    toast.success('Model exported as JSON');
+    if (!currentOutput) { toast.error('Run Save & Compute first'); return; }
+    try {
+      const { exportToExcel } = await import('../lib/excelExport');
+      const projects = (await import('../lib/storage')).getProjects();
+      const project  = projects.find((p) => p.id === projectId);
+      exportToExcel(project?.name || 'model', currentOutput);
+      toast.success('Excel downloaded');
+    } catch (err) {
+      toast.error(err.message || 'Export failed');
+    }
   }, [projectId]);
 
   return {

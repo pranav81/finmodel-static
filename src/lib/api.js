@@ -77,10 +77,8 @@ export const versionsApi = {
     return { data: result };
   },
 
-  // No Excel export in static version
-  exportExcel: async () => {
-    throw new Error('Excel export is not available in the static version. Use JSON export instead.');
-  },
+  // Excel export handled directly in useModel.js via excelExport.js
+  exportExcel: async () => { return { data: null }; },
 };
 
 // ── projectsApi ────────────────────────────────────────────────────────────
