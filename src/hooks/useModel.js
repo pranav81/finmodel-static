@@ -107,7 +107,7 @@ export function useModel() {
       const { exportToExcel } = await import('../lib/excelExport');
       const projects = (await import('../lib/storage')).getProjects();
       const project  = projects.find((p) => p.id === projectId);
-      exportToExcel(project?.name || 'model', currentOutput);
+      exportToExcel(project?.name || 'model', currentOutput, currentInput);
       toast.success('Excel downloaded');
     } catch (err) {
       toast.error(err.message || 'Export failed');

@@ -1,202 +1,270 @@
 import { useState } from 'react';
-import { AppShell, Icon, SectionTitle, Spinner, ReadOnlyBanner } from '../components/ui';
+import { AppShell, Icon, Spinner, SectionTitle } from '../components/ui';
 import { useModel } from '../hooks/useModel';
 import { toast } from '../store';
 
-function ScenarioCard({ scenario, assumptions, onEdit, onDelete, isActive, onSetActive }) {
-  return (
-    <div className="card" style={{
-      borderColor: isActive ? 'var(--gold)' : 'var(--border)',
-      transition: 'border-color 0.2s',
-    }}>
-      <div className="card-header">
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: '1rem' }}>{scenario.label}</span>
-            {isActive && <span className="badge badge-gold">Active</span>}
-            {scenario.is_default && <span className="badge badge-neutral">Default</span>}
-          </div>
-          {scenario.description && (
-            <p style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.2rem' }}>{scenario.description}</p>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: '0.4rem' }}>
-          {!isActive && (
-            <button className="btn btn-secondary btn-sm" onClick={() => onSetActive(scenario.id)}>
-              Set Active
-            </button>
-          )}
-          <button className="btn btn-icon btn-ghost btn-sm" onClick={() => onEdit(scenario)}>
-            <Icon name="edit" size={13} />
-          </button>
-          {!scenario.is_default && (
-            <button className="btn btn-icon btn-ghost btn-sm" onClick={() => onDelete(scenario.id)}
-              style={{ color: 'var(--muted)' }}>
-              <Icon name="trash" size={13} />
-            </button>
-          )}
-        </div>
-      </div>
+// ─────────────────────────────────────────────────────────────────────────────
+// OVERRIDE ROW
+// ─────────────────────────────────────────────────────────────────────────────
 
-      <div style={{ padding: '1rem 1.5rem' }}>
-        {scenario.overrides.length === 0 ? (
-          <p style={{ fontSize: '0.78rem', color: 'var(--muted)', fontStyle: 'italic' }}>
-            No overrides — uses base assumptions as-is.
-          </p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            {scenario.overrides.map((ov, i) => {
-              const param = assumptions.find((a) => a.key === ov.key);
-              const sign = ov.value >= 0 ? '+' : '';
-              return (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: '0.75rem',
-                  fontSize: '0.8rem', fontFamily: 'var(--font-mono)',
-                }}>
-                  <span style={{ color: 'var(--text-2)', minWidth: 220 }}>
-                    {param?.label || ov.key}
-                  </span>
-                  <span style={{
-                    color: ov.value >= 0 ? 'var(--green)' : 'var(--red)',
-                    fontWeight: 500,
-                  }}>
-                    {ov.mode === 'delta_pct'
-                      ? `${sign}${ov.value}%`
-                      : `= ${ov.value} (absolute)`}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+function OverrideRow({ override, assumptions, onChange, onDelete }) {
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '1fr 130px 110px auto',
+      gap: '0.5rem', alignItems: 'center', padding: '0.35rem 0',
+      borderBottom: '1px solid var(--border)',
+    }}>
+      {/* Parameter key selector */}
+      <select
+        className="form-input"
+        value={override.key}
+        onChange={(e) => onChange({ ...override, key: e.target.value })}
+        style={{ fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
+      >
+        <option value="">— select parameter —</option>
+        {assumptions.map((a) => (
+          <option key={a.key} value={a.key}>
+            {a.key} ({a.value}{a.unit ? ' ' + a.unit : ''})
+          </option>
+        ))}
+      </select>
+
+      {/* Mode */}
+      <select
+        className="form-input"
+        value={override.mode}
+        onChange={(e) => onChange({ ...override, mode: e.target.value })}
+        style={{ fontSize: '0.8rem' }}
+      >
+        <option value="absolute">Absolute</option>
+        <option value="delta_pct">± %</option>
+        <option value="delta_abs">± Value</option>
+      </select>
+
+      {/* Value */}
+      <input
+        type="number"
+        className="form-input"
+        value={override.value}
+        onChange={(e) => onChange({ ...override, value: parseFloat(e.target.value) || 0 })}
+        style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}
+      />
+
+      <button className="btn btn-icon btn-ghost btn-sm"
+        onClick={onDelete} style={{ color: 'var(--muted)' }}>
+        <Icon name="trash" size={13} />
+      </button>
     </div>
   );
 }
 
-function ScenarioEditor({ scenario, assumptions, onSave, onClose }) {
-  const [form, setForm] = useState(scenario
-    ? { ...scenario, overrides: [...scenario.overrides.map((o) => ({ ...o }))] }
-    : { id: '', label: '', description: '', overrides: [], is_default: false }
-  );
-  const isNew = !scenario;
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO CARD — collapsible, fully editable
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ScenarioCard({ scenario, assumptions, isActive, onSwitch, onChange, onDelete, isComputing }) {
+  const [open, setOpen] = useState(false);
 
   const addOverride = () => {
-    setForm((f) => ({
-      ...f,
-      overrides: [...f.overrides, { key: assumptions[0]?.key || '', mode: 'delta_pct', value: 0 }],
-    }));
+    onChange({ ...scenario, overrides: [...(scenario.overrides || []), { key: '', mode: 'absolute', value: 0 }] });
   };
 
-  const updateOverride = (i, patch) => {
-    setForm((f) => {
-      const overrides = [...f.overrides];
-      overrides[i] = { ...overrides[i], ...patch };
-      return { ...f, overrides };
-    });
+  const updateOverride = (i, updated) => {
+    const next = [...scenario.overrides];
+    next[i] = updated;
+    onChange({ ...scenario, overrides: next });
   };
 
-  const removeOverride = (i) => {
-    setForm((f) => ({ ...f, overrides: f.overrides.filter((_, j) => j !== i) }));
+  const deleteOverride = (i) => {
+    onChange({ ...scenario, overrides: scenario.overrides.filter((_, j) => j !== i) });
   };
+
+  const isBase = scenario.id === 'base';
+
+  return (
+    <div style={{
+      border: `1px solid ${isActive ? 'var(--blue-border)' : 'var(--border)'}`,
+      borderRadius: 'var(--radius-lg)',
+      background: isActive ? 'var(--blue-pale)' : 'var(--surface)',
+      overflow: 'hidden',
+      boxShadow: isActive ? 'var(--shadow-sm)' : 'none',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '0.75rem',
+        padding: '0.85rem 1rem',
+      }}>
+        {/* Expand/collapse */}
+        <button
+          className="btn btn-icon btn-ghost btn-sm"
+          onClick={() => setOpen(!open)}
+          style={{ color: 'var(--text-3)', flexShrink: 0 }}
+        >
+          <Icon name="chevron" size={13}
+            style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+        </button>
+
+        {/* Label — editable inline */}
+        <input
+          className="form-input"
+          value={scenario.label}
+          onChange={(e) => onChange({ ...scenario, label: e.target.value })}
+          style={{
+            flex: 1, background: 'transparent', border: 'none', padding: 0,
+            fontSize: '0.95rem', fontWeight: 600, color: 'var(--text)', outline: 'none',
+          }}
+        />
+
+        {/* Override count badge */}
+        {(scenario.overrides?.length || 0) > 0 && (
+          <span className="badge badge-blue" style={{ flexShrink: 0 }}>
+            {scenario.overrides.length} override{scenario.overrides.length !== 1 ? 's' : ''}
+          </span>
+        )}
+
+        {/* Active indicator */}
+        {isActive && (
+          <span className="badge badge-green" style={{ flexShrink: 0 }}>Active</span>
+        )}
+
+        {/* Switch button */}
+        {!isActive && (
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => onSwitch(scenario.id)}
+            disabled={isComputing}
+            style={{ flexShrink: 0 }}
+          >
+            {isComputing ? <Spinner size={11} /> : 'Switch'}
+          </button>
+        )}
+
+        {/* Delete — not available for base */}
+        {!isBase && (
+          <button
+            className="btn btn-icon btn-ghost btn-sm"
+            onClick={() => onDelete(scenario.id)}
+            style={{ color: 'var(--muted)', flexShrink: 0 }}
+          >
+            <Icon name="trash" size={13} />
+          </button>
+        )}
+      </div>
+
+      {/* Expanded editor */}
+      {open && (
+        <div style={{ padding: '0.75rem 1rem 1rem', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
+          {/* Description */}
+          <div className="form-group" style={{ marginBottom: '1rem' }}>
+            <label className="form-label">Description <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional)</span></label>
+            <input
+              className="form-input"
+              value={scenario.description || ''}
+              onChange={(e) => onChange({ ...scenario, description: e.target.value })}
+              placeholder="e.g. Higher tariff, lower O&M"
+            />
+          </div>
+
+          {/* Overrides */}
+          {isBase ? (
+            <div style={{ fontSize: '0.8rem', color: 'var(--muted)', fontStyle: 'italic', padding: '0.5rem 0' }}>
+              Base Case uses all parameters at their default values. No overrides needed.
+            </div>
+          ) : (
+            <>
+              {/* Column headers */}
+              {(scenario.overrides?.length || 0) > 0 && (
+                <div style={{
+                  display: 'grid', gridTemplateColumns: '1fr 130px 110px auto',
+                  gap: '0.5rem', padding: '0.2rem 0',
+                  fontSize: '0.63rem', fontFamily: 'var(--font-mono)',
+                  letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)',
+                  borderBottom: '1px solid var(--border-2)',
+                }}>
+                  <span>Parameter</span>
+                  <span>Mode</span>
+                  <span style={{ textAlign: 'right' }}>Value</span>
+                  <span />
+                </div>
+              )}
+
+              {(scenario.overrides || []).map((ov, i) => (
+                <OverrideRow
+                  key={i}
+                  override={ov}
+                  assumptions={assumptions}
+                  onChange={(updated) => updateOverride(i, updated)}
+                  onDelete={() => deleteOverride(i)}
+                />
+              ))}
+
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={addOverride}
+                style={{ marginTop: '0.5rem' }}
+              >
+                <Icon name="plus" size={13} /> Add override
+              </button>
+
+              {(scenario.overrides?.length || 0) === 0 && (
+                <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                  No overrides yet — this scenario is identical to Base Case. Add overrides above.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NEW SCENARIO MODAL
+// ─────────────────────────────────────────────────────────────────────────────
+
+function NewScenarioModal({ onClose, onCreate }) {
+  const [form, setForm] = useState({ label: '', description: '' });
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const id = form.id || form.label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-    if (!id || !form.label) return toast.error('Label is required');
-    onSave({ ...form, id });
+    if (!form.label.trim()) return;
+    onCreate({
+      id: `scenario_${Date.now()}`,
+      label: form.label.trim(),
+      description: form.description.trim(),
+      overrides: [],
+      is_default: false,
+    });
+    onClose();
   };
 
   return (
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 500, backdropFilter: 'blur(6px)', padding: '2rem',
+      zIndex: 500, backdropFilter: 'blur(6px)',
     }}>
-      <div className="card" style={{ width: '100%', maxWidth: 620, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
-        <div className="card-header">
-          <h3>{isNew ? 'New Scenario' : `Edit: ${scenario.label}`}</h3>
+      <div className="card" style={{ width: 420, padding: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+          <h3>New Scenario</h3>
           <button className="btn btn-icon btn-ghost" onClick={onClose}><Icon name="x" size={16} /></button>
         </div>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-          <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-              <div className="form-group">
-                <label className="form-label">Scenario Label *</label>
-                <input className="form-input" value={form.label} placeholder="e.g. Base Case"
-                  onChange={(e) => setForm({ ...form, label: e.target.value })} required />
-              </div>
-              <div className="form-group">
-                <label className="form-label">ID <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(auto if blank)</span></label>
-                <input className="form-input" value={form.id} placeholder="base_case"
-                  onChange={(e) => setForm({ ...form, id: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
-                  disabled={!isNew} style={{ opacity: isNew ? 1 : 0.5 }} />
-              </div>
-              <div className="form-group" style={{ gridColumn: '1/-1' }}>
-                <label className="form-label">Description</label>
-                <input className="form-input" value={form.description} placeholder="Brief description of this scenario"
-                  onChange={(e) => setForm({ ...form, description: e.target.value })} />
-              </div>
-            </div>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+            <label className="form-label">Label *</label>
+            <input className="form-input" placeholder="e.g. Bull Case"
+              value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} required />
           </div>
-
-          <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-              <SectionTitle>Assumption Overrides</SectionTitle>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={addOverride}>
-                <Icon name="plus" size={13} /> Add Override
-              </button>
-            </div>
-
-            {form.overrides.length === 0 ? (
-              <p style={{ fontSize: '0.8rem', color: 'var(--muted)', fontStyle: 'italic', padding: '0.75rem 0' }}>
-                No overrides. This scenario uses all base assumptions unchanged.
-              </p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {/* Header */}
-                <div style={{
-                  display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto',
-                  gap: '0.5rem', fontSize: '0.68rem', fontFamily: 'var(--font-mono)',
-                  color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em',
-                  paddingBottom: '0.35rem', borderBottom: '1px solid var(--border)',
-                }}>
-                  <span>Parameter</span><span>Mode</span><span>Value</span><span />
-                </div>
-
-                {form.overrides.map((ov, i) => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.5rem', alignItems: 'center' }}>
-                    <select className="form-input" value={ov.key}
-                      onChange={(e) => updateOverride(i, { key: e.target.value })}
-                      style={{ fontSize: '0.8rem' }}>
-                      {assumptions.map((a) => (
-                        <option key={a.key} value={a.key}>{a.label}</option>
-                      ))}
-                    </select>
-                    <select className="form-input" value={ov.mode}
-                      onChange={(e) => updateOverride(i, { mode: e.target.value })}
-                      style={{ fontSize: '0.78rem' }}>
-                      <option value="delta_pct">% change</option>
-                      <option value="absolute">Absolute</option>
-                    </select>
-                    <input className="form-input" type="number" value={ov.value}
-                      onChange={(e) => updateOverride(i, { value: parseFloat(e.target.value) || 0 })}
-                      style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}
-                      placeholder={ov.mode === 'delta_pct' ? '% e.g. -10' : 'value'} />
-                    <button type="button" className="btn btn-icon btn-ghost btn-sm"
-                      onClick={() => removeOverride(i)} style={{ color: 'var(--muted)' }}>
-                      <Icon name="x" size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+          <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+            <label className="form-label">Description</label>
+            <input className="form-input" placeholder="e.g. Higher tariff, lower costs"
+              value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </div>
-
-          <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid var(--border)', display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn-primary btn-sm">
-              {isNew ? 'Create Scenario' : 'Save Changes'}
+              <Icon name="plus" size={14} /> Create
             </button>
           </div>
         </form>
@@ -205,40 +273,39 @@ function ScenarioEditor({ scenario, assumptions, onSave, onClose }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIOS PAGE
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function ScenariosPage() {
   const { input, updateInput, save, activeScenarioId, switchScenario, isComputing, isExample } = useModel();
-  const [editing, setEditing] = useState(null);
   const [showNew, setShowNew] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving]   = useState(false);
 
-  if (!input) return <AppShell title="Scenarios"><div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}><Spinner /></div></AppShell>;
+  if (!input) return (
+    <AppShell title="Scenarios">
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}><Spinner /></div>
+    </AppShell>
+  );
 
-  const scenarios = input.scenarios || [];
+  const scenarios   = input.scenarios || [];
   const assumptions = input.assumptions || [];
 
-  const handleSave = (updated) => {
-    const existing = scenarios.find((s) => s.id === updated.id);
-    const next = existing
-      ? scenarios.map((s) => s.id === updated.id ? updated : s)
-      : [...scenarios, updated];
+  const updateScenario = (updatedScenario) => {
+    const next = scenarios.map((s) => s.id === updatedScenario.id ? updatedScenario : s);
     updateInput({ scenarios: next });
-    setEditing(null);
-    setShowNew(false);
-    toast.success(existing ? 'Scenario updated' : 'Scenario created');
   };
 
-  const handleDelete = (id) => {
+  const deleteScenario = (id) => {
     updateInput({ scenarios: scenarios.filter((s) => s.id !== id) });
-    toast.success('Scenario removed');
+    if (activeScenarioId === id) switchScenario('base');
   };
 
-  const handleSetActive = async (id) => {
-    setSaving(true);
-    try { await switchScenario(id); }
-    finally { setSaving(false); }
+  const addScenario = (newScenario) => {
+    updateInput({ scenarios: [...scenarios, newScenario] });
   };
 
-  const handleSaveAll = async () => {
+  const handleSave = async () => {
     setSaving(true);
     try { await save('Updated scenarios'); }
     finally { setSaving(false); }
@@ -247,68 +314,47 @@ export function ScenariosPage() {
   return (
     <AppShell
       title="Scenarios"
-      actions={
-        <>
-          {!isExample && (
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowNew(true)}>
-              <Icon name="plus" size={14} /> New Scenario
-            </button>
-          )}
-          {!isExample && (
-            <button className="btn btn-primary btn-sm" onClick={handleSaveAll} disabled={saving || isComputing}>
-              {saving || isComputing ? <Spinner size={14} /> : <><Icon name="save" size={14} /> Save & Compute</>}
-            </button>
-          )}
-        </>
-      }
+      actions={!isExample ? (
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowNew(true)}>
+            <Icon name="plus" size={13} /> New Scenario
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving || isComputing}>
+            {saving || isComputing ? <Spinner size={14} /> : <><Icon name="save" size={14} /> Save & Compute</>}
+          </button>
+        </div>
+      ) : null}
     >
-      {isExample && <ReadOnlyBanner />}
       <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '1.5rem' }}>
-        Define Base, Bull, Bear (or any custom) scenarios. Each overrides specific assumption values
-        by a % delta or absolute replacement. Switch the active scenario to recompute outputs.
+        Scenarios let you compare the model under different assumptions. Click any scenario card to expand and edit its overrides. Switch between scenarios on the output pages to see how metrics change.
       </p>
 
-      {/* Active scenario switcher */}
-      {scenarios.length > 0 && (
-        <div style={{ marginBottom: '1.5rem' }}>
-          <SectionTitle>Active Scenario</SectionTitle>
-          <div className="scenario-bar" style={{ display: 'inline-flex' }}>
-            {scenarios.map((s) => (
-              <button
-                key={s.id}
-                className={`scenario-option${activeScenarioId === s.id ? ' active' : ''}`}
-                onClick={() => handleSetActive(s.id)}
-                disabled={isComputing}
-              >
-                {isComputing && activeScenarioId === s.id ? <Spinner size={11} /> : s.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         {scenarios.map((s) => (
           <ScenarioCard
             key={s.id}
             scenario={s}
             assumptions={assumptions}
             isActive={activeScenarioId === s.id}
-            onEdit={setEditing}
-            onDelete={handleDelete}
-            onSetActive={handleSetActive}
+            onSwitch={switchScenario}
+            onChange={updateScenario}
+            onDelete={deleteScenario}
+            isComputing={isComputing}
           />
         ))}
       </div>
 
-      {(editing || showNew) && (
-        <ScenarioEditor
-          scenario={editing}
-          assumptions={assumptions}
-          onSave={handleSave}
-          onClose={() => { setEditing(null); setShowNew(false); }}
-        />
+      {scenarios.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
+          No scenarios yet.
+          <button className="btn btn-secondary btn-sm" style={{ marginLeft: '0.75rem' }}
+            onClick={() => setShowNew(true)}>
+            <Icon name="plus" size={13} /> Add one
+          </button>
+        </div>
       )}
+
+      {showNew && <NewScenarioModal onClose={() => setShowNew(false)} onCreate={addScenario} />}
     </AppShell>
   );
 }

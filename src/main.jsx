@@ -13,8 +13,7 @@ const DebtPage           = React.lazy(() => import('./pages/Capex').then(m => ({
 const RevenueDriversPage = React.lazy(() => import('./pages/Drivers').then(m => ({ default: m.RevenueDriversPage })));
 const CostDriversPage    = React.lazy(() => import('./pages/Drivers').then(m => ({ default: m.CostDriversPage })));
 const FinancialsPage     = React.lazy(() => import('./pages/Outputs').then(m => ({ default: m.FinancialsPage })));
-const MetricsPage        = React.lazy(() => import('./pages/Outputs').then(m => ({ default: m.MetricsPage })));
-const DashboardPage      = React.lazy(() => import('./pages/Outputs').then(m => ({ default: m.DashboardPage })));
+const OverviewPage       = React.lazy(() => import('./pages/Overview').then(m => ({ default: m.OverviewPage })));
 
 function App() {
   return (
@@ -31,8 +30,10 @@ function App() {
             <Route path="/projects/:projectId/revenue"      element={<RevenueDriversPage />} />
             <Route path="/projects/:projectId/costs"        element={<CostDriversPage />} />
             <Route path="/projects/:projectId/financials"   element={<FinancialsPage />} />
-            <Route path="/projects/:projectId/metrics"      element={<MetricsPage />} />
-            <Route path="/projects/:projectId/dashboard"    element={<DashboardPage />} />
+            <Route path="/projects/:projectId/overview"     element={<OverviewPage />} />
+            {/* Legacy redirects */}
+            <Route path="/projects/:projectId/metrics"   element={<Navigate to="overview" replace />} />
+            <Route path="/projects/:projectId/dashboard" element={<Navigate to="overview" replace />} />
             <Route path="*" element={<Navigate to="/projects" replace />} />
           </Routes>
         </React.Suspense>

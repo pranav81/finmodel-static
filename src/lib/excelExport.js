@@ -287,16 +287,98 @@ function buildCapex(output) {
   return ws;
 }
 
-// ── Main export function ───────────────────────────────────────────────────
 
-export function exportToExcel(projectName, output) {
+
+function buildParameters(input) {
+  const assumptions = input?.assumptions || [];
+  const data = [
+    ['Parameters', '', '', ''],
+    ['', '', '', ''],
+    ['Key', 'Label', 'Value', 'Unit / Tag'],
+    ...assumptions.map((a) => [a.key, a.label, a.value, `${a.unit || ''}${a.group ? ' [' + a.group + ']' : ''}`]),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{ wch: 28 }, { wch: 32 }, { wch: 14 }, { wch: 20 }];
+  // Bold header
+  ws['A1'] = { v: 'Parameters', t: 's', s: { font: { bold: true, sz: 13 } } };
+  ws['A3'] = { v: 'Key',   t: 's', s: { font: { bold: true } } };
+  ws['B3'] = { v: 'Label', t: 's', s: { font: { bold: true } } };
+  ws['C3'] = { v: 'Value', t: 's', s: { font: { bold: true } } };
+  ws['D3'] = { v: 'Unit / Tag', t: 's', s: { font: { bold: true } } };
+  return ws;
+}
+
+function buildRevenueSchedule(output) {
+  const fys     = output.meta.fy_range;
+  const rev     = output.revenue;
+  const cur     = output.meta.currency;
+  if (!rev) return null;
+
+  const byLine  = rev.revenue_by_line  || {};
+  const meta    = rev.revenue_metadata || {};
+  const total   = rev.revenue_total    || {};
+  const lineIds = Object.keys(byLine);
+
+  const header  = makeHeader('Revenue Schedule', fys, cur);
+  const colHead = ['Line Item', 'Category', ...fys];
+  const rows    = lineIds.map((id) => [
+    meta[id]?.label    || id,
+    meta[id]?.category || '',
+    ...fys.map((fy) => rnd(byLine[id]?.[fy])),
+  ]);
+  const totalRow = ['Total Revenue', '', ...fys.map((fy) => rnd(total[fy]))];
+
+  const ws = XLSX.utils.aoa_to_sheet([...header, colHead, ...rows, [], totalRow]);
+  ws['!cols'] = [{ wch: 30 }, { wch: 20 }, ...fys.map(() => ({ wch: 11 }))];
+  return ws;
+}
+
+function buildCostSchedule(output) {
+  const fys     = output.meta.fy_range;
+  const costs   = output.costs;
+  const cur     = output.meta.currency;
+  if (!costs) return null;
+
+  const byLine  = costs.cost_by_line    || {};
+  const meta    = costs.cost_metadata   || {};
+  const total   = costs.cost_total      || {};
+  const lineIds = Object.keys(byLine);
+
+  const header  = makeHeader('Cost Schedule', fys, cur);
+  const colHead = ['Line Item', 'Category', ...fys];
+  const rows    = lineIds.map((id) => [
+    meta[id]?.label    || id,
+    meta[id]?.category || '',
+    ...fys.map((fy) => rnd(byLine[id]?.[fy])),
+  ]);
+  const totalRow = ['Total Costs', '', ...fys.map((fy) => rnd(total[fy]))];
+
+  const ws = XLSX.utils.aoa_to_sheet([...header, colHead, ...rows, [], totalRow]);
+  ws['!cols'] = [{ wch: 30 }, { wch: 20 }, ...fys.map(() => ({ wch: 11 }))];
+  return ws;
+}
+
+// Overwrite the main export function to include new sheets
+export function exportToExcel(projectName, output, input) {
   if (!output) throw new Error('No computed output — run Save & Compute first');
 
   const wb = XLSX.utils.book_new();
 
+  // Parameters first — most useful reference sheet
+  if (input) {
+    XLSX.utils.book_append_sheet(wb, buildParameters(input), 'Parameters');
+  }
+
   XLSX.utils.book_append_sheet(wb, buildIncomeStatement(output), 'Income Statement');
   XLSX.utils.book_append_sheet(wb, buildBalanceSheet(output),    'Balance Sheet');
   XLSX.utils.book_append_sheet(wb, buildCashFlow(output),        'Cash Flow');
+
+  const revSheet = buildRevenueSchedule(output);
+  if (revSheet) XLSX.utils.book_append_sheet(wb, revSheet, 'Revenue Schedule');
+
+  const costSheet = buildCostSchedule(output);
+  if (costSheet) XLSX.utils.book_append_sheet(wb, costSheet, 'Cost Schedule');
+
   XLSX.utils.book_append_sheet(wb, buildTax(output),             'Tax Schedule');
   XLSX.utils.book_append_sheet(wb, buildDebt(output),            'Debt Schedule');
   XLSX.utils.book_append_sheet(wb, buildCapex(output),           'CAPEX');
