@@ -61,7 +61,7 @@ export async function initEngine() {
     progress(40, 'Installing packages…');
     await pyodide.loadPackage(['micropip']);
     const micropip = pyodide.pyimport('micropip');
-    await micropip.install(['pydantic', 'numpy-financial']);
+    await micropip.install(['pydantic', 'numpy-financial', 'simpleeval']);
 
     progress(65, 'Loading financial engine…');
 
