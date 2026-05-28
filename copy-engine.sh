@@ -11,6 +11,7 @@ fi
 
 cp "$MAIN_ENGINE/runner.py"                          public/engine/runner.py
 cp "$MAIN_ENGINE/models/assumptions.py"             public/engine/models/assumptions.py
+cp "$MAIN_ENGINE/compute/formula.py"                 public/engine/compute/formula.py
 cp "$MAIN_ENGINE/compute/capex.py"                  public/engine/compute/capex.py
 cp "$MAIN_ENGINE/compute/debt.py"                   public/engine/compute/debt.py
 cp "$MAIN_ENGINE/compute/drivers.py"                public/engine/compute/drivers.py

@@ -27,6 +27,7 @@ function progress(pct, msg) {
 // Engine Python files to load from /public/engine/
 const ENGINE_FILES = [
   'models/assumptions.py',
+  'compute/formula.py',
   'compute/capex.py',
   'compute/debt.py',
   'compute/drivers.py',
