@@ -167,3 +167,17 @@ export function ConfirmDialog({ message, onConfirm, onCancel }) {
     </div>
   );
 }
+
+export function ReadOnlyBanner() {
+  return (
+    <div style={{
+      background: 'var(--blue-pale)', border: '1px solid var(--blue-border)',
+      borderRadius: 'var(--radius)', padding: '0.6rem 1rem', marginBottom: '1.25rem',
+      display: 'flex', alignItems: 'center', gap: '0.6rem',
+      fontSize: '0.82rem', color: 'var(--blue)',
+    }}>
+      <Icon name="folder" size={14} style={{ flexShrink: 0 }} />
+      <span><strong>Read Only.</strong> This project cannot be edited.</span>
+    </div>
+  );
+}
